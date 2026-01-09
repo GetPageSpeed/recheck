@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 100">
+  <defs>
+    <linearGradient id="gradient-light" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6c3eb3"/>
+      <stop offset="50%" style="stop-color:#9c6fe6"/>
+      <stop offset="100%" style="stop-color:#ffb300"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shield Icon -->
+  <g transform="translate(10, 10)">
+    <path d="M40 0 L80 15 L80 50 C80 70 60 85 40 90 C20 85 0 70 0 50 L0 15 Z"
+          fill="url(#gradient-light)" opacity="0.9"/>
+    <path d="M40 8 L72 20 L72 48 C72 64 55 76 40 80 C25 76 8 64 8 48 L8 20 Z"
+          fill="white"/>
+    <!-- Magnifying glass -->
+    <circle cx="38" cy="40" r="15" fill="none" stroke="#6c3eb3" stroke-width="4"/>
+    <line x1="48" y1="50" x2="58" y2="60" stroke="#6c3eb3" stroke-width="4" stroke-linecap="round"/>
+    <!-- Regex pattern inside -->
+    <text x="38" y="45" font-family="monospace" font-size="12" font-weight="bold"
+          fill="#6c3eb3" text-anchor="middle">.*</text>
+  </g>
+
+  <!-- ReDoctor Text -->
+  <text x="105" y="65" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif"
+        font-size="48" font-weight="800" fill="#1a1a2e">
+    Re<tspan fill="url(#gradient-light)">Doctor</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text x="107" y="88" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif"
+        font-size="14" fill="#666">
+    ReDoS Vulnerability Scanner
+  </text>
+</svg>

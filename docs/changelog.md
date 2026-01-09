@@ -1,0 +1,119 @@
+---
+title: Changelog
+description: Version history and release notes for ReDoctor.
+---
+
+# Changelog
+
+All notable changes to ReDoctor are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.1.0] - 2026-01-09
+
+### 🎉 Initial Release
+
+First public release of ReDoctor!
+
+### Added
+
+- **Hybrid Analysis Engine**
+  - Automaton-based static analysis for patterns without backreferences
+  - Fuzz-based dynamic analysis for complex patterns
+  - Automatic checker selection based on pattern features
+
+- **Comprehensive Detection**
+  - Exponential complexity (O(2^n)) detection
+  - Polynomial complexity (O(n^k)) detection
+  - Attack string generation with prefix/pump/suffix structure
+  - Hotspot identification for vulnerable pattern portions
+
+- **Command Line Interface**
+  - `redoctor` command for checking patterns
+  - Support for regex flags (`-i`, `-m`, `-s`)
+  - Verbose and quiet output modes
+  - Stdin support for batch processing
+  - Configurable timeout
+
+- **Python API**
+  - `check()` function for pattern analysis
+  - `is_vulnerable()` and `is_safe()` helpers
+  - `HybridChecker` class for reuse
+  - Full type hints
+
+- **Configuration**
+  - `Config` class with extensive options
+  - Preset configurations: `default()`, `quick()`, `thorough()`
+  - Timeout, iteration limits, and more
+
+- **Source Code Scanning**
+  - `scan_file()` for individual files
+  - `scan_directory()` for projects
+  - AST-based pattern extraction from `re` module calls
+
+- **Diagnostics**
+  - `Diagnostics` result object with full details
+  - `Status` enum (SAFE, VULNERABLE, UNKNOWN, ERROR)
+  - `Complexity` with type and degree
+  - `AttackPattern` with build methods
+  - JSON serialization via `to_dict()`
+
+- **Documentation**
+  - Comprehensive README
+  - Full API documentation
+  - CLI reference
+  - Pattern examples
+  - MkDocs site with Material theme
+
+### Supported Python Versions
+
+- Python 3.6
+- Python 3.7
+- Python 3.8
+- Python 3.9
+- Python 3.10
+- Python 3.11
+- Python 3.12
+- Python 3.13
+
+### Links
+
+- [PyPI](https://pypi.org/project/redoctor/)
+- [GitHub](https://github.com/GetPageSpeed/redoctor)
+- [Documentation](https://redoctor.getpagespeed.com)
+
+---
+
+## Roadmap
+
+### Planned for Future Releases
+
+- **v0.2.0**
+  - GitHub Actions integration
+  - Pre-commit hook support
+  - JSON/SARIF output format
+  - Improved NFA construction for edge cases
+
+- **v0.3.0**
+  - Pattern rewriting suggestions
+  - VS Code extension
+  - Performance improvements
+
+- **v1.0.0**
+  - Stable API
+  - Comprehensive test coverage
+  - Production-ready guarantees
+
+---
+
+## Release Notes Format
+
+Each release includes:
+
+- **Added** - New features
+- **Changed** - Changes in existing functionality
+- **Deprecated** - Features to be removed in future releases
+- **Removed** - Removed features
+- **Fixed** - Bug fixes
+- **Security** - Vulnerability fixes

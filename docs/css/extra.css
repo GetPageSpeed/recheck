@@ -1,0 +1,357 @@
+/* ReDoctor - Custom Styles */
+
+/* ===== Root Variables ===== */
+:root {
+  /* Brand Colors */
+  --md-primary-fg-color: #6c3eb3;
+  --md-primary-fg-color--light: #9c6fe6;
+  --md-primary-fg-color--dark: #4a2a7a;
+  --md-accent-fg-color: #ffb300;
+
+  /* Gradients */
+  --redoctor-gradient: linear-gradient(135deg, #6c3eb3 0%, #9c6fe6 50%, #ffb300 100%);
+  --redoctor-gradient-dark: linear-gradient(135deg, #4a2a7a 0%, #6c3eb3 100%);
+}
+
+/* Dark mode adjustments */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #9c6fe6;
+  --md-accent-fg-color: #ffc107;
+}
+
+/* ===== Hero Section ===== */
+.md-typeset .hero {
+  text-align: center;
+  padding: 4rem 1rem;
+  margin-bottom: 3rem;
+  background: var(--redoctor-gradient);
+  border-radius: 1rem;
+  color: white;
+}
+
+.md-typeset .hero h1 {
+  font-size: 3rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.md-typeset .hero p {
+  font-size: 1.3rem;
+  opacity: 0.95;
+  max-width: 700px;
+  margin: 0 auto 2rem;
+}
+
+/* ===== Feature Cards ===== */
+.md-typeset .feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.md-typeset .feature-card {
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  background: var(--md-code-bg-color);
+  border: 1px solid var(--md-typeset-table-color);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.md-typeset .feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+}
+
+.md-typeset .feature-card h3 {
+  margin-top: 0;
+  color: var(--md-primary-fg-color);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.md-typeset .feature-card .icon {
+  font-size: 1.5rem;
+}
+
+/* ===== Buttons ===== */
+.md-typeset .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 2rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.md-typeset .btn-primary {
+  background: var(--md-primary-fg-color);
+  color: white !important;
+}
+
+.md-typeset .btn-primary:hover {
+  background: var(--md-primary-fg-color--dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(108, 62, 179, 0.4);
+}
+
+.md-typeset .btn-secondary {
+  background: transparent;
+  color: var(--md-primary-fg-color) !important;
+  border: 2px solid var(--md-primary-fg-color);
+}
+
+.md-typeset .btn-secondary:hover {
+  background: var(--md-primary-fg-color);
+  color: white !important;
+}
+
+.md-typeset .btn-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ===== Code Blocks ===== */
+.md-typeset pre > code {
+  border-radius: 0.5rem;
+}
+
+.md-typeset .highlight pre {
+  border-radius: 0.75rem;
+}
+
+/* Terminal-style code blocks */
+.md-typeset .terminal {
+  background: #1e1e1e;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.md-typeset .terminal::before {
+  content: "● ● ●";
+  display: block;
+  padding: 0.5rem 1rem;
+  background: #323232;
+  color: #888;
+  font-size: 0.7rem;
+  letter-spacing: 0.3rem;
+}
+
+/* ===== Admonitions ===== */
+.md-typeset .admonition.warning {
+  border-color: #ff9800;
+}
+
+.md-typeset .admonition.danger {
+  border-color: #f44336;
+}
+
+.md-typeset .admonition.success {
+  border-color: #4caf50;
+}
+
+/* Custom ReDoS vulnerability admonition */
+.md-typeset .admonition.vuln,
+.md-typeset details.vuln {
+  border-color: #e91e63;
+}
+
+.md-typeset .admonition.vuln > .admonition-title,
+.md-typeset details.vuln > summary {
+  background-color: rgba(233, 30, 99, 0.1);
+}
+
+.md-typeset .admonition.vuln > .admonition-title::before,
+.md-typeset details.vuln > summary::before {
+  background-color: #e91e63;
+  -webkit-mask-image: var(--md-admonition-icon--warning);
+  mask-image: var(--md-admonition-icon--warning);
+}
+
+/* ===== Tables ===== */
+.md-typeset table:not([class]) {
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.md-typeset table:not([class]) th {
+  background: var(--md-primary-fg-color);
+  color: white;
+}
+
+/* Complexity table */
+.md-typeset .complexity-table td:first-child {
+  font-family: var(--md-code-font-family);
+  font-weight: 600;
+}
+
+.md-typeset .complexity-table .safe {
+  color: #4caf50;
+}
+
+.md-typeset .complexity-table .moderate {
+  color: #ff9800;
+}
+
+.md-typeset .complexity-table .critical {
+  color: #f44336;
+}
+
+/* ===== Architecture Diagram ===== */
+.md-typeset .architecture-diagram {
+  background: var(--md-code-bg-color);
+  padding: 2rem;
+  border-radius: 1rem;
+  margin: 2rem 0;
+  overflow-x: auto;
+}
+
+.md-typeset .architecture-diagram pre {
+  margin: 0;
+  background: transparent;
+  font-size: 0.85rem;
+}
+
+/* ===== Stats Section ===== */
+.md-typeset .stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+  text-align: center;
+}
+
+.md-typeset .stat {
+  padding: 1.5rem;
+  background: var(--md-code-bg-color);
+  border-radius: 0.75rem;
+}
+
+.md-typeset .stat-value {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--md-primary-fg-color);
+  display: block;
+}
+
+.md-typeset .stat-label {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.05rem;
+}
+
+/* ===== Badges ===== */
+.md-typeset .badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 1rem 0;
+}
+
+.md-typeset .badges img {
+  height: 20px;
+}
+
+/* ===== Quick Start Section ===== */
+.md-typeset .quickstart {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.md-typeset .quickstart-item {
+  background: var(--md-code-bg-color);
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  border-left: 4px solid var(--md-primary-fg-color);
+}
+
+.md-typeset .quickstart-item h4 {
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.md-typeset .quickstart-item .step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--md-primary-fg-color);
+  color: white;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+/* ===== Comparison Table ===== */
+.md-typeset .comparison th {
+  text-align: center;
+}
+
+.md-typeset .comparison .check {
+  color: #4caf50;
+  font-size: 1.2rem;
+}
+
+.md-typeset .comparison .cross {
+  color: #f44336;
+  font-size: 1.2rem;
+}
+
+/* ===== Footer Enhancement ===== */
+.md-footer {
+  border-top: 1px solid var(--md-typeset-table-color);
+}
+
+/* ===== Animations ===== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.md-typeset .animate-in {
+  animation: fadeInUp 0.6s ease forwards;
+}
+
+/* ===== Responsive Adjustments ===== */
+@media (max-width: 768px) {
+  .md-typeset .hero h1 {
+    font-size: 2rem;
+  }
+
+  .md-typeset .hero p {
+    font-size: 1.1rem;
+  }
+
+  .md-typeset .btn-group {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+/* ===== Print Styles ===== */
+@media print {
+  .md-typeset .hero {
+    background: #f5f5f5;
+    color: #333;
+    border: 2px solid #6c3eb3;
+  }
+}

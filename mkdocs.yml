@@ -1,0 +1,204 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+site_name: ReDoctor
+site_url: https://redoctor.getpagespeed.com
+site_description: >-
+  ReDoctor - The Python ReDoS Vulnerability Scanner. Protect your applications
+  from Regular Expression Denial of Service attacks with static analysis and fuzzing.
+site_author: GetPageSpeed
+copyright: Copyright &copy; 2024-2026 GetPageSpeed
+
+repo_name: GetPageSpeed/redoctor
+repo_url: https://github.com/GetPageSpeed/redoctor
+edit_uri: edit/main/docs/
+
+# Theme configuration
+theme:
+  name: material
+  custom_dir: docs/overrides
+  language: en
+
+  # Color palette with light/dark toggle
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+  icon:
+    logo: material/shield-search
+    repo: fontawesome/brands/github
+
+  features:
+    # Navigation
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - navigation.footer
+
+    # Table of contents
+    - toc.follow
+
+    # Search
+    - search.suggest
+    - search.highlight
+    - search.share
+
+    # Content
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+
+    # Announce
+    - announce.dismiss
+
+# Plugins
+plugins:
+  - search:
+      separator: '[\s\-\.]+'
+      lang:
+        - en
+  - minify:
+      minify_html: true
+  # Uncomment for social cards (requires: pip install "mkdocs-material[imaging]")
+  # - social:
+  #     cards_layout_options:
+  #       background_color: "#6c3eb3"
+  #       color: "#ffffff"
+
+# Extensions
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Link to this section
+      toc_depth: 3
+
+  # PyMdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      auto_append:
+        - includes/abbreviations.md
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Extra configuration
+extra:
+  homepage: https://redoctor.getpagespeed.com
+
+  # Social links
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/GetPageSpeed/redoctor
+      name: ReDoctor on GitHub
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/redoctor/
+      name: ReDoctor on PyPI
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/GetPageSpeed
+      name: GetPageSpeed on Twitter
+
+  # Analytics (uncomment when GOOGLE_ANALYTICS_KEY is set)
+  # analytics:
+  #   provider: google
+  #   property: !ENV GOOGLE_ANALYTICS_KEY
+  #   feedback:
+  #     title: Was this page helpful?
+  #     ratings:
+  #       - icon: material/emoticon-happy-outline
+  #         name: This page was helpful
+  #         data: 1
+  #         note: >-
+  #           Thanks for your feedback!
+  #       - icon: material/emoticon-sad-outline
+  #         name: This page could be improved
+  #         data: 0
+  #         note: >-
+  #           Thanks for your feedback! Help us improve by
+  #           <a href="https://github.com/GetPageSpeed/redoctor/issues/new" target="_blank" rel="noopener">opening an issue</a>.
+
+  # Version
+  version:
+    provider: mike
+    default: latest
+
+  # SEO
+  generator: false
+
+extra_css:
+  - css/extra.css
+
+# Navigation
+nav:
+  - Home:
+    - Overview: index.md
+    - Getting Started: getting-started.md
+    - Installation: installation.md
+  - User Guide:
+    - CLI Reference: cli.md
+    - Python API: api.md
+    - Configuration: configuration.md
+    - Source Scanning: source-scanning.md
+  - Learn:
+    - Understanding ReDoS: redos-explained.md
+    - Vulnerable Patterns: vulnerable-patterns.md
+    - Safe Patterns: safe-patterns.md
+    - How ReDoctor Works: how-it-works.md
+  - Reference:
+    - API Reference: api-reference.md
+    - Complexity Types: complexity.md
+    - Changelog: changelog.md
+  - Contributing: contributing.md
