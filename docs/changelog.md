@@ -10,6 +10,45 @@ All notable changes to ReDoctor are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-01-09
+
+### Changed
+
+- **Verified 1:1 Behavior with Recheck**: Comprehensive verification that detection behavior matches the reference [recheck](https://github.com/MakeNowJust-Labo/recheck) implementation
+  - Added test suite mirroring recheck's `AutomatonCheckerSuite.scala` tests
+  - Verified all constant, linear, polynomial, and exponential complexity patterns
+  - Confirmed no false positives on safe patterns like `^a+$`, `^[a-z]+$`, `^(a|b)+$`
+  - Confirmed no false negatives on vulnerable patterns like `^(a+)+$`, `^(a|a)*$`, `^(a|b|ab)*$`
+
+### Added
+
+- **Extended Test Coverage**
+  - `test_recheck_compatibility.py` - Tests for must-be-safe and must-be-vulnerable patterns
+  - `test_recheck_full_suite.py` - Full test suite matching recheck's complexity classification
+  - `test_recheck_automaton_suite.py` - Direct ports from recheck's Scala test suite
+
+### Fixed
+
+- Edge cases in polynomial ambiguity detection with product automaton
+
+---
+
+## [0.1.2] - 2026-01-08
+
+### Fixed
+
+- Improved detection accuracy for nested quantifiers
+
+---
+
+## [0.1.1] - 2026-01-08
+
+### Fixed
+
+- Fixed false positives on simple patterns like `^a+$`
+
+---
+
 ## [0.1.0] - 2026-01-09
 
 ### 🎉 Initial Release

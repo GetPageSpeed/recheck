@@ -700,3 +700,34 @@ def count_captures(node: Node) -> int:
         if isinstance(n, (Capture, NamedCapture)):
             count += 1
     return count
+
+
+def has_nested_quantifiers(node: Node) -> bool:
+    """Check if a pattern has nested quantifiers.
+
+    Nested quantifiers like (a+)+, (a*)*, or (a+){2,} can cause the
+    automaton checker's epsilon elimination to collapse ambiguous paths.
+    The fuzz checker should be used as a fallback for such patterns.
+
+    Only considers unbounded or high-bound quantifiers as potentially
+    problematic:
+    - Star (*), Plus (+), or Question (?) containing another quantifier
+    - Quantifier with max >= 10 or unbounded containing another quantifier
+    """
+    for n in node.walk():
+        # Check if this is an unbounded-ish quantifier
+        is_outer_quantifier = isinstance(n, (Star, Plus)) or (
+            isinstance(n, Quantifier) and (n.max is None or n.max >= 10)
+        )
+
+        if is_outer_quantifier:
+            # Check if its child contains another quantifier
+            for child in n.child.walk():
+                if isinstance(child, (Star, Plus, Question)):
+                    return True
+                if isinstance(child, Quantifier) and (
+                    child.max is None or child.max >= 2
+                ):
+                    return True
+
+    return False

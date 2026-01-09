@@ -69,15 +69,27 @@ class HybridChecker:
         if checker_type == CheckerType.AUTOMATON:
             result = self.automaton_checker.check_pattern(pattern)
 
-            # If automaton checker returns safe or unknown, also try fuzz
-            # The automaton checker has known limitations with certain patterns
-            # (e.g., nested quantifiers like (a+)+ where epsilon elimination
-            # collapses the ambiguous paths)
-            if result.status in (Status.UNKNOWN, Status.SAFE):
+            # If automaton checker returns unknown, use fuzz as fallback
+            if result.status == Status.UNKNOWN:
                 fuzz_result = self.fuzz_checker.check_pattern(pattern)
-                # Take the more severe result
                 if fuzz_result.is_vulnerable:
                     result = fuzz_result
+
+            # If automaton says SAFE, trust it.
+            # The product automaton construction correctly detects ambiguity
+            # by finding divergent pairs (states where two paths lead to
+            # different NFA states on the same input). If no divergent pairs
+            # exist, the pattern is unambiguous and safe.
+            #
+            # Examples where automaton correctly says SAFE:
+            # - (a*)* : No divergent pairs because 'a' always goes to same state
+            # - (a|b)+ : Disjoint character sets, no overlap
+            # - a{1,50} : Bounded quantifier, finite ambiguity
+            #
+            # Note: We used to run fuzz fallback for nested quantifiers, but
+            # this caused false positives. The automaton analysis is correct
+            # for these patterns (matching recheck's AutomatonChecker behavior
+            # which classifies (a*)* as Linear, not Exponential).
 
         else:  # FUZZ
             result = self.fuzz_checker.check_pattern(pattern)

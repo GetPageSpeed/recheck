@@ -19,80 +19,144 @@ class OrderedNFA:
         initial: Initial state.
         accepting: Set of accepting states.
         transitions: Transitions grouped by source state and ordered by priority.
+        multi_transitions: Maps (state, char_key) to count of paths reaching that transition.
+                          A count > 1 indicates EDA (multiple epsilon paths to same char transition).
     """
 
     states: Set[State] = field(default_factory=set)
     initial: Optional[State] = None
     accepting: Set[State] = field(default_factory=set)
     transitions: Dict[State, List[Transition]] = field(default_factory=dict)
+    multi_transitions: Dict[Tuple[State, State], int] = field(default_factory=dict)
 
     @classmethod
     def from_eps_nfa(cls, eps_nfa: EpsNFA) -> "OrderedNFA":
         """Convert an epsilon-NFA to an ordered NFA by eliminating epsilon transitions.
 
-        For ambiguity detection, we need to track which intermediate state
-        the character transition comes from. This is important for patterns
-        like (a+)+ where different epsilon paths lead to the same character
-        transition but represent different computational paths.
+        For ambiguity detection, we count the number of epsilon PATHS that lead
+        to each character transition, not just whether the transition is reachable.
 
-        The epsilon closure is used for:
-        1. Finding which character transitions are reachable from a state
-        2. Determining if a state can reach accepting states
+        For patterns like (a+)+:
+        - From state S, we might reach the 'a' transition via multiple epsilon paths
+        - Path 1: S -> inner_loop_entry -> char_trans
+        - Path 2: S -> outer_loop -> inner_loop_entry -> char_trans
+        - These multiple paths = EDA (exponential degree of ambiguity)
+
+        This is the key insight from recheck's AutomatonChecker.
         """
         ordered = cls()
         ordered.states = set(eps_nfa.states)
         ordered.initial = eps_nfa.initial
         ordered.accepting = set(eps_nfa.accepting)
 
-        # Build epsilon closures for each state
-        closures: Dict[State, Set[State]] = {}
-        for state in eps_nfa.states:
-            closures[state] = eps_nfa.epsilon_closure({state})
+        # Track multi-transitions: how many epsilon paths lead to each char transition
+        multi_trans_count: Dict[Tuple[State, State], int] = {}
 
         # For each state, collect character transitions reachable through epsilon
         for state in eps_nfa.states:
             ordered.transitions[state] = []
 
-            # Collect all transitions from epsilon closure
-            # Key: track (closure_state, char, target) to preserve different paths
-            # that lead to the same character transition from different epsilon paths
-            trans_by_priority: Dict[int, List[Transition]] = {}
-            seen_transitions: Set[tuple] = set()
+            # Count the number of EPSILON PATHS to each intermediate state
+            # that has a character transition. This is different from just
+            # counting which states are in the closure - we need to count paths.
+            path_counts_to_intermediate = cls._count_epsilon_paths(eps_nfa, state)
 
-            for closure_state in closures[state]:
-                for trans in eps_nfa.transitions_from(closure_state):
-                    if trans.type == TransitionType.CHAR:
-                        # Track the intermediate state (closure_state) to distinguish
-                        # different epsilon paths that reach the same char transition
-                        trans_key = (
-                            closure_state,
-                            trans.char,
-                            trans.target,
-                            trans.priority,
+            # Now for each intermediate state with character transitions,
+            # check if there are multiple epsilon paths to it
+            trans_by_priority: Dict[int, List[Transition]] = {}
+            seen_trans: Set[Tuple[State, Optional[IChar]]] = set()
+
+            for interm_state, num_paths in path_counts_to_intermediate.items():
+                for trans in eps_nfa.transitions_from(interm_state):
+                    if trans.type == TransitionType.CHAR and trans.char:
+                        # Deduplicate transitions with same target
+                        trans_key = (trans.target, trans.char)
+                        if trans_key in seen_trans:
+                            continue
+                        seen_trans.add(trans_key)
+
+                        new_trans = Transition(
+                            source=state,
+                            target=trans.target,
+                            type=TransitionType.CHAR,
+                            char=trans.char,
+                            priority=trans.priority,
                         )
-                        if trans_key not in seen_transitions:
-                            seen_transitions.add(trans_key)
-                            new_trans = Transition(
-                                source=state,
-                                target=trans.target,
-                                type=TransitionType.CHAR,
-                                char=trans.char,
-                                priority=trans.priority,
+                        prio = trans.priority
+                        if prio not in trans_by_priority:
+                            trans_by_priority[prio] = []
+                        trans_by_priority[prio].append(new_trans)
+
+                        # Track if there are multiple paths to this transition
+                        if num_paths > 1:
+                            existing = multi_trans_count.get((state, trans.target), 0)
+                            multi_trans_count[(state, trans.target)] = max(
+                                existing, num_paths
                             )
-                            prio = trans.priority
-                            if prio not in trans_by_priority:
-                                trans_by_priority[prio] = []
-                            trans_by_priority[prio].append(new_trans)
 
             # Sort by priority and add
             for prio in sorted(trans_by_priority.keys()):
                 ordered.transitions[state].extend(trans_by_priority[prio])
 
             # Check if any state in epsilon closure is accepting
-            if closures[state] & eps_nfa.accepting:
+            closure = eps_nfa.epsilon_closure({state})
+            if closure & eps_nfa.accepting:
                 ordered.accepting.add(state)
 
+        ordered.multi_transitions = multi_trans_count
         return ordered
+
+    @classmethod
+    def _count_epsilon_paths(cls, eps_nfa: EpsNFA, start: State) -> Dict[State, int]:
+        """Count the number of epsilon paths from start to each reachable state.
+
+        This uses dynamic programming to count paths, not just reachability.
+        For a state that can be reached via multiple epsilon paths, this will
+        return a count > 1.
+
+        For example, in (a+)+, from the state after reading 'a':
+        - The inner loop entry state can be reached directly (1 path)
+        - It can also be reached via the outer loop re-entry (1 more path)
+        - Total: 2 paths, indicating EDA
+        """
+        # path_count[state] = number of distinct epsilon paths from start to state
+        path_count: Dict[State, int] = {start: 1}
+        visited_order: List[State] = []
+
+        # BFS to find topological order (though cycles are possible in epsilon graphs)
+        # For cycles, we need to detect them and mark as having infinite paths
+        from collections import deque
+
+        queue = deque([start])
+        in_queue: Set[State] = {start}
+
+        while queue:
+            current = queue.popleft()
+            visited_order.append(current)
+
+            for trans in eps_nfa.transitions_from(current):
+                if trans.is_epsilon():
+                    target = trans.target
+                    if target not in path_count:
+                        path_count[target] = 0
+
+                    # Add paths from current to target
+                    path_count[target] += path_count[current]
+
+                    # If target already processed but we found more paths, that's a cycle
+                    # In that case, mark as having "many" paths (2+ is enough for EDA)
+                    if target in in_queue:
+                        # Cycle detected - this state has multiple paths
+                        path_count[target] = max(path_count[target], 2)
+                    elif target not in in_queue:
+                        queue.append(target)
+                        in_queue.add(target)
+
+        return path_count
+
+    def has_multi_transitions(self) -> bool:
+        """Check if there are multi-transitions (EDA indicator)."""
+        return len(self.multi_transitions) > 0
 
     def get_transitions(self, state: State) -> List[Transition]:
         """Get transitions from a state in priority order."""
