@@ -49,7 +49,7 @@ class Parser:
         self.pos = 0
         self.flags = flags or Flags()
         self.capture_count = 0
-        self.named_captures = {}  # type: Dict[str, int]
+        self.named_captures = {}
 
     def parse(self) -> Pattern:
         """Parse the entire pattern."""
