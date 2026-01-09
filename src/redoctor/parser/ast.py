@@ -685,6 +685,97 @@ def has_backreferences(node: Node) -> bool:
     return False
 
 
+def has_end_anchor(node: Node) -> bool:
+    """Check if a pattern has an end anchor ($ or \\Z).
+
+    End anchors force the regex to match until the end of the string,
+    which can make patterns like (a*)* exponential. Without end anchors,
+    these patterns can match early and escape without backtracking.
+
+    Returns:
+        True if the pattern contains LineEnd or StringEnd.
+    """
+    for n in node.walk():
+        if isinstance(n, (LineEnd, StringEnd)):
+            return True
+    return False
+
+
+def has_start_anchor(node: Node) -> bool:
+    """Check if a pattern has a start anchor (^ or \\A).
+
+    Returns:
+        True if the pattern contains LineStart or StringStart.
+    """
+    for n in node.walk():
+        if isinstance(n, (LineStart, StringStart)):
+            return True
+    return False
+
+
+def is_anchored(node: Node) -> bool:
+    """Check if a pattern is anchored at both ends (^...$ or \\A...\\Z).
+
+    Fully anchored patterns must match the entire input string, which
+    means patterns like (a*)* will exhibit exponential backtracking
+    when the input doesn't match.
+
+    Returns:
+        True if the pattern has both start and end anchors.
+    """
+    return has_start_anchor(node) and has_end_anchor(node)
+
+
+def requires_continuation(node: Node) -> bool:
+    """Check if the pattern requires matching content after quantified groups.
+
+    A pattern like `^(a+)+@` requires matching @ after the nested quantifiers,
+    which means the engine must try all combinations when @ is not found.
+    This is different from `(a*)*` which can match empty and escape early.
+
+    Returns:
+        True if the pattern has required content (literals, anchors, etc.)
+        after any quantified groups. This makes nested quantifiers exploitable
+        even without an explicit $ anchor.
+    """
+    # Walk the AST and check if there's non-optional content after quantifiers
+    if not isinstance(node, Sequence):
+        # For simple quantified nodes, check if they're the only content
+        return False
+
+    children = node.nodes  # Sequence uses 'nodes' attribute
+    if not children:
+        return False
+
+    # Find the last significant child (skipping any end anchors)
+    last_idx = len(children) - 1
+    while last_idx >= 0 and isinstance(children[last_idx], (LineEnd, StringEnd)):
+        last_idx -= 1
+
+    if last_idx < 0:
+        return False
+
+    # Check if there's required content after any quantified group
+    for i, child in enumerate(children[: last_idx + 1]):
+        if isinstance(child, (Star, Plus, Question, Repeat, Capture, NonCapture)):
+            # There's a quantified group, check if there's required content after
+            for j in range(i + 1, len(children)):
+                following = children[j]
+                # Skip zero-width assertions and optional content
+                if isinstance(following, (LineEnd, StringEnd)):
+                    continue
+                if isinstance(following, (Star, Question)):
+                    continue  # Optional
+                # Check for Quantifier with min=0 (optional)
+                if isinstance(following, Quantifier):
+                    if following.min == 0:
+                        continue  # Optional
+                # There's required content after the quantifier
+                return True
+
+    return False
+
+
 def has_lookaround(node: Node) -> bool:
     """Check if a pattern contains lookahead or lookbehind."""
     for n in node.walk():

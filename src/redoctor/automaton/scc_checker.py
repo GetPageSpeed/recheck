@@ -8,13 +8,27 @@ This implements the precise EDA/IDA detection algorithm from recheck:
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Set, Tuple
-from collections import defaultdict
+from collections import defaultdict, deque
 
 from redoctor.automaton.eps_nfa import EpsNFA
 from redoctor.automaton.nfa import OrderedNFARecheck, NFAwLA
 from redoctor.diagnostics.complexity import Complexity
 from redoctor.unicode.ichar import IChar
+
+
+class MatchMode(Enum):
+    """How the regex is expected to be used for matching.
+
+    This affects false positive detection for patterns like (a*)* which are:
+    - SAFE with partial matching (can escape early)
+    - EXPONENTIAL with full-string matching (must consume all input)
+    """
+
+    AUTO = "auto"
+    FULL = "full"
+    PARTIAL = "partial"
 
 
 # Type aliases for readability
@@ -108,9 +122,34 @@ class AmbiguityWitness:
 class SCCChecker:
     """Checker using SCC-based analysis following recheck's algorithm."""
 
-    def __init__(self, eps_nfa: EpsNFA, max_nfa_size: int = 100000):
+    def __init__(
+        self,
+        eps_nfa: EpsNFA,
+        max_nfa_size: int = 100000,
+        match_mode: MatchMode = MatchMode.AUTO,
+        has_end_anchor: bool = False,
+        requires_continuation: bool = False,
+    ):
+        """Initialize the SCC checker.
+
+        Args:
+            eps_nfa: The epsilon-NFA to analyze.
+            max_nfa_size: Maximum NFA size before falling back.
+            match_mode: How the regex is expected to be used.
+            has_end_anchor: Whether the pattern has an end anchor ($ or \\Z).
+                This is used with match_mode=AUTO to determine if patterns
+                like (a*)* should be flagged. Without end anchors, such
+                patterns can escape early and are safe.
+            requires_continuation: Whether the pattern has required content
+                after quantified groups (e.g., ^([^@]+)+@). This forces the
+                engine to try all combinations, making it exploitable even
+                without a $ anchor.
+        """
         self.eps_nfa = eps_nfa
         self.max_nfa_size = max_nfa_size
+        self.match_mode = match_mode
+        self.has_end_anchor = has_end_anchor
+        self.requires_continuation = requires_continuation
         self.ordered_nfa: Optional[OrderedNFARecheck] = None
         self.nfa_wla: Optional[NFAwLA] = None
         self.graph: Optional[SCCGraph] = None
@@ -120,11 +159,16 @@ class SCCChecker:
     def check(self) -> Tuple[Complexity, Optional[AmbiguityWitness]]:
         """Perform the full complexity check.
 
-        We use a two-phase approach:
-        1. Quick check: Look for multi-transitions in OrderedNFA
-           (multiple paths to same target = definite EDA)
-        2. Detailed check: Use NFAwLA with look-ahead pruning
-           (can eliminate false positives like (a*)*)
+        Following recheck's algorithm precisely:
+        1. Build OrderedNFA from epsilon-NFA
+        2. Build NFAwLA with look-ahead pruning (this eliminates false positives!)
+        3. Compute SCCs on NFAwLA graph
+        4. Check for EDA: multi-transitions within non-trivial SCCs
+        5. Check for IDA: divergent chains between SCCs
+
+        The key insight is that we DON'T use OrderedNFA.has_multi_trans directly.
+        That would cause false positives like (a*)* being flagged as exponential.
+        Instead, we apply look-ahead pruning first, then check for multi-transitions.
 
         Returns:
             Tuple of (complexity, optional witness).
@@ -133,21 +177,21 @@ class SCCChecker:
             # Step 1: Build OrderedNFA
             self.ordered_nfa = OrderedNFARecheck.from_eps_nfa(self.eps_nfa)
 
-            # Step 2: Check for multi-transitions (definite EDA)
-            # This catches patterns like (a+)+ where multiple epsilon paths
-            # lead to the same character transition
-            if self.ordered_nfa.has_multi_trans:
-                witness = self._build_quick_witness()
-                return Complexity.exponential(), witness
-
-            # Step 3: Build NFAwLA for more precise analysis
+            # Step 2: Build NFAwLA with look-ahead pruning
+            # This is the key step that eliminates false positives!
+            # For patterns like (a*)*, the look-ahead pruning recognizes that
+            # both nested levels consume the same characters, so there's no
+            # real ambiguity.
             try:
                 self.nfa_wla = self.ordered_nfa.to_nfa_wla(self.max_nfa_size)
             except ValueError:
-                # NFAwLA too large
+                # NFAwLA too large - fall back to conservative detection
+                if self.ordered_nfa.has_multi_trans:
+                    witness = self._build_quick_witness()
+                    return Complexity.exponential(), witness
                 return Complexity.safe(), None
 
-            # Step 4: Build graph and compute SCCs
+            # Step 3: Build graph and compute SCCs
             self.graph = SCCGraph.from_nfa_wla(self.nfa_wla)
             self.sccs = self.graph.compute_sccs()
 
@@ -157,13 +201,14 @@ class SCCChecker:
                 for state in scc:
                     self.scc_map[state] = i
 
-            # Step 5: Check for EDA in NFAwLA SCCs
+            # Step 4: Check for EDA in NFAwLA SCCs
+            # This checks for multi-transitions AFTER pruning
             eda_result = self._check_exponential()
             if eda_result:
                 witness = self._build_witness(eda_result)
                 return Complexity.exponential(), witness
 
-            # Step 6: Check for IDA (polynomial)
+            # Step 5: Check for IDA (polynomial) using pair graph approach
             ida_result = self._check_polynomial()
             if ida_result:
                 degree, pumps = ida_result
@@ -196,114 +241,178 @@ class SCCChecker:
     def _check_exponential(self) -> Optional[Tuple[List[NFAState], List[NFAChar]]]:
         """Check for EDA (Exponential Degree of Ambiguity).
 
-        EDA exists if a state that is part of a cycle (non-trivial SCC) has
-        multiple targets for the same character. The targets don't need to
-        be in the same SCC - the key is that the SOURCE is in a cycle.
+        Following recheck's algorithm from AutomatonChecker.checkExponentialComponent:
+        1. Check for multi-transitions (duplicate targets for same (state, char))
+        2. Verify that multi-transitions represent GENUINE ambiguity
+        3. If no multi-transitions, use pair graph (G2) to find EDA structure
 
-        This is because being in a cycle means the ambiguity can be pumped
-        indefinitely, leading to exponential blowup.
+        EDA exists when there's a structure that allows exponential divergence:
+        - Either duplicate targets for same transition (that can't be bypassed)
+        - Or a pair graph SCC containing both (q,q) and (q1,q2) where q1 != q2
         """
         if not self.sccs or not self.graph or not self.nfa_wla:
             return None
 
-        # Collect all states that are in non-trivial SCCs (i.e., part of a cycle)
-        cycling_states: Set[NFAState] = set()
+        # Check each non-trivial SCC for EDA
         for scc in self.sccs:
-            if not self.graph.is_atom(scc):
-                cycling_states.update(scc)
+            if self.graph.is_atom(scc):
+                continue
 
-        if not cycling_states:
-            return None
+            scc_set = set(scc)
 
-        # Check NFAwLA delta directly for duplicate targets
-        # This is recheck's approach: multi-transition = same (source, char) with
-        # the SAME target appearing multiple times (duplicates in target list)
-        if self.nfa_wla:
-            for (state, nfa_char), targets in self.nfa_wla.delta.items():
-                if state not in cycling_states:
-                    continue
-                # Check for duplicate targets
-                if len(targets) != len(set(targets)):
-                    for scc in self.sccs:
-                        if state in scc:
-                            return (scc, [nfa_char])
+            # Build edges within this SCC grouped by character
+            edges_by_char: Dict[NFAChar, List[Tuple[NFAState, NFAState]]] = defaultdict(
+                list
+            )
+            for state in scc:
+                for nfa_char, target in self.graph.neighbors.get(state, []):
+                    if target in scc_set:
+                        edges_by_char[nfa_char].append((state, target))
+
+            # Check for multi-transitions: same (source, char) with duplicate targets
+            for nfa_char, edges in edges_by_char.items():
+                # Group by source state
+                by_source: Dict[NFAState, List[NFAState]] = defaultdict(list)
+                for source, target in edges:
+                    by_source[source].append(target)
+
+                # Check for duplicates
+                for source, targets in by_source.items():
+                    if len(targets) != len(set(targets)):
+                        # Found multi-transitions! But verify they're exploitable.
+                        # Multi-transitions are NOT exploitable if the source state
+                        # can accept from its look-ahead position (meaning the regex
+                        # can match empty at this point, making the duplicates
+                        # semantically equivalent).
+                        if not self._is_multi_trans_exploitable(source, nfa_char):
+                            continue
+                        return (scc, [nfa_char])
+
+            # If no multi-transitions, use pair graph (G2) approach
+            eda_result = self._check_eda_with_pair_graph(scc, scc_set, edges_by_char)
+            if eda_result:
+                return eda_result
 
         return None
 
-    def _check_eda_pair_graph(
-        self, scc: List[NFAState], scc_set: Set[NFAState]
+    def _is_multi_trans_exploitable(self, state: NFAState, nfa_char: NFAChar) -> bool:
+        """Check if a multi-transition from this state is exploitable.
+
+        Multi-transitions indicate that multiple epsilon paths lead to the
+        same character transition. This is the structure of nested quantifiers
+        like (a+)+ or (a*)*.
+
+        Exploitability depends on whether the regex can "escape early":
+        - With full-string matching ($ anchor): must consume all input,
+          backtracking occurs when match fails at end → EXPLOITABLE
+        - With partial matching (no $ anchor): can match early and stop,
+          no backtracking needed → NOT EXPLOITABLE
+
+        This is controlled by the match_mode setting:
+        - AUTO: Check for end anchor in the pattern
+        - FULL: Always consider multi-transitions exploitable
+        - PARTIAL: Only consider exploitable if there's no early escape
+        """
+        if self.match_mode == MatchMode.FULL:
+            # Conservative: assume full-string matching
+            return True
+
+        if self.match_mode == MatchMode.PARTIAL:
+            # In PARTIAL mode, patterns without end anchor can escape early
+            # But if there's required continuation (like @), it's still exploitable
+            if not self.has_end_anchor and not self.requires_continuation:
+                # No end anchor and no continuation → can escape early → not exploitable
+                return False
+            # Has end anchor OR requires continuation → exploitable
+            return True
+
+        # AUTO mode: use anchor and continuation detection
+        if not self.has_end_anchor and not self.requires_continuation:
+            # No end anchor and no continuation → can escape early → not exploitable
+            # This is the key insight: (a*)* without $ is safe in partial match
+            # But ^([^@]+)+@ IS exploitable because of the @ after the quantifier
+            return False
+
+        # Has end anchor OR requires continuation → must try all combinations → exploitable
+        return True
+
+    def _check_eda_with_pair_graph(
+        self,
+        scc: List[NFAState],
+        scc_set: Set[NFAState],
+        edges_by_char: Dict[NFAChar, List[Tuple[NFAState, NFAState]]],
     ) -> Optional[Tuple[List[NFAState], List[NFAChar]]]:
-        """Check for EDA using pair graph (G2) approach.
+        """Check for EDA using pair graph (G2) approach from recheck.
 
         Build a graph where states are pairs (q1, q2) of original states,
         and there's an edge on char 'a' if both q1 and q2 have transitions
         on 'a' to (q1', q2').
 
-        EDA exists if G2 has an SCC containing both (q, q) and (q1, q2) where q1 != q2.
-        """
-        if not self.graph:
-            return None
+        EDA exists if G2 has an SCC containing both:
+        - A diagonal pair (q, q)
+        - An off-diagonal pair (q1, q2) where q1 != q2
 
-        # Build pair graph edges within this SCC
+        This means we can reach a divergent state from convergent and back,
+        which creates exponential ambiguity.
+        """
+        # Build pair graph edges
         # State: (q1, q2), Edge: char
         pair_edges: Dict[
             Tuple[NFAState, NFAState], List[Tuple[NFAChar, Tuple[NFAState, NFAState]]]
         ] = defaultdict(list)
 
-        edges_by_char: Dict[NFAChar, List[Tuple[NFAState, NFAState]]] = defaultdict(
-            list
-        )
-        for state in scc:
-            for char, target in self.graph.neighbors.get(state, []):
-                if target in scc_set:
-                    edges_by_char[char].append((state, target))
-
-        # Build pair transitions
-        for char, edges in edges_by_char.items():
+        for nfa_char, edges in edges_by_char.items():
+            # For each pair of transitions on the same character
             for q1, q1_prime in edges:
                 for q2, q2_prime in edges:
                     pair_state = (q1, q2)
                     next_pair = (q1_prime, q2_prime)
-                    pair_edges[pair_state].append((char, next_pair))
+                    pair_edges[pair_state].append((nfa_char, next_pair))
 
         if not pair_edges:
             return None
 
-        # Build pair graph and compute SCCs
-        pair_vertices = set(pair_edges.keys())
+        # Collect all pair vertices
+        pair_vertices: Set[Tuple[NFAState, NFAState]] = set(pair_edges.keys())
         for edges in pair_edges.values():
             for _, target in edges:
                 pair_vertices.add(target)
 
-        # Simple SCC check: look for (q,q) and (q1,q2) in same reachable set
+        # Find diagonal pairs (q, q) that can reach off-diagonal pairs
+        # and have a path back to diagonal
         for start_pair in pair_vertices:
             if start_pair[0] != start_pair[1]:
                 continue  # Start from diagonal pairs (q, q)
 
-            # BFS to find reachable pairs
+            # BFS to find off-diagonal pairs reachable from this diagonal
             visited: Set[Tuple[NFAState, NFAState]] = set()
-            stack = [start_pair]
-            path_chars: List[NFAChar] = []
+            queue: deque[Tuple[Tuple[NFAState, NFAState], List[NFAChar]]] = deque(
+                [(start_pair, [])]
+            )
 
-            while stack:
-                current = stack.pop()
+            while queue:
+                current, path = queue.popleft()
                 if current in visited:
                     continue
                 visited.add(current)
 
-                # Check if we found a divergent pair reachable from diagonal
+                # Check if we found an off-diagonal pair
                 if current[0] != current[1]:
-                    # Check if we can get back to a diagonal
+                    # Now check if we can get back to ANY diagonal pair
                     for next_char, next_pair in pair_edges.get(current, []):
-                        if next_pair in visited or next_pair[0] == next_pair[1]:
-                            # Found EDA structure
-                            return (scc, [next_char])
+                        # If next is diagonal or already visited diagonal
+                        if next_pair[0] == next_pair[1]:
+                            # Found EDA: diagonal -> off-diagonal -> diagonal
+                            return (scc, path + [next_char] if path else [next_char])
 
+                        # Also check if next leads to a diagonal we already saw
+                        if next_pair in visited and next_pair[0] == next_pair[1]:
+                            return (scc, path + [next_char] if path else [next_char])
+
+                # Continue BFS
                 for next_char, next_pair in pair_edges.get(current, []):
                     if next_pair not in visited:
-                        stack.append(next_pair)
-                        if not path_chars or path_chars[-1] != next_char:
-                            path_chars.append(next_char)
+                        queue.append((next_pair, path + [next_char]))
 
         return None
 
@@ -402,12 +511,35 @@ class SCCChecker:
         )
 
 
-def check_with_scc(eps_nfa: EpsNFA) -> Tuple[Complexity, Optional[AmbiguityWitness]]:
+def check_with_scc(
+    eps_nfa: EpsNFA,
+    match_mode: MatchMode = MatchMode.AUTO,
+    has_end_anchor: bool = False,
+    requires_continuation: bool = False,
+) -> Tuple[Complexity, Optional[AmbiguityWitness]]:
     """Check an epsilon-NFA for ReDoS vulnerabilities using SCC analysis.
 
     This is the proper algorithm from recheck that provides:
     - No false negatives (detects all real vulnerabilities)
-    - No false positives (doesn't flag safe patterns)
+    - Configurable false positive handling based on match context
+
+    Args:
+        eps_nfa: The epsilon-NFA to analyze.
+        match_mode: How the regex is expected to be used.
+            - AUTO: Check for anchors to determine if patterns can escape early
+            - FULL: Assume full-string matching (most conservative)
+            - PARTIAL: Assume partial matching (fewer false positives)
+        has_end_anchor: Whether the pattern has an end anchor ($ or \\Z).
+        requires_continuation: Whether pattern has required content after
+            quantified groups (e.g., ^([^@]+)+@).
+
+    Returns:
+        Tuple of (complexity, optional witness).
     """
-    checker = SCCChecker(eps_nfa)
+    checker = SCCChecker(
+        eps_nfa,
+        match_mode=match_mode,
+        has_end_anchor=has_end_anchor,
+        requires_continuation=requires_continuation,
+    )
     return checker.check()

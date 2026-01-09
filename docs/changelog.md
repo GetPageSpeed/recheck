@@ -10,6 +10,34 @@ All notable changes to ReDoctor are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-01-10
+
+### Added
+
+- **Match Mode Configuration**: New `MatchMode` setting to control false positive behavior
+  - `AUTO` (default): Infer exploitability from pattern anchors (`$`, `\Z`)
+  - `FULL`: Conservative mode assuming full-string matching
+  - `PARTIAL`: Fewer false positives for search-style matching
+- **Anchor Detection Helpers**: New AST functions `has_end_anchor()`, `has_start_anchor()`, `is_anchored()`, `requires_continuation()`
+- **NGINX Usage Guide**: New documentation page for checking NGINX location regexes
+- **Cursor Rules**: Added `.cursor/rules/20-redos-detection.mdc` documenting architecture decisions
+
+### Changed
+
+- **Improved False Positive Handling**: SCC checker now considers pattern anchoring when determining if multi-transitions are exploitable
+  - `(a*)*` without anchors → correctly marked as **safe** (can escape early)
+  - `^(a*)*$` with anchor → correctly marked as **exponential** (must match to end)
+  - `^([^@]+)+@` → correctly marked as **exponential** (continuation required)
+- **NFAwLA Precision**: Look-ahead pruning now preserves all transitions; exploitability determined by `_is_multi_trans_exploitable`
+
+### Documentation
+
+- Updated `docs/configuration.md` with Match Mode section
+- Updated `docs/how-it-works.md` with NFAwLA architecture and exploitability checks
+- Added `docs/nginx-usage.md` for NGINX-specific guidance
+
+---
+
 ## [0.1.3] - 2026-01-09
 
 ### Changed

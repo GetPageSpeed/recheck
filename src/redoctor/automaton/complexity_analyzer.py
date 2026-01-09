@@ -6,7 +6,7 @@ from collections import deque
 
 from redoctor.automaton.eps_nfa import EpsNFA, State
 from redoctor.automaton.ordered_nfa import OrderedNFA, NFAStatePair, build_product_nfa
-from redoctor.automaton.scc_checker import check_with_scc
+from redoctor.automaton.scc_checker import check_with_scc, MatchMode
 from redoctor.diagnostics.complexity import Complexity
 from redoctor.unicode.ichar import IChar
 
@@ -35,19 +35,40 @@ class ComplexityAnalyzer:
 
     Uses the proper SCC-based algorithm from recheck for precise detection:
     - No false negatives (detects all real vulnerabilities)
-    - No false positives (doesn't flag safe patterns like (a*)*)
+    - Configurable false positive handling based on match context
     """
 
-    def __init__(self, eps_nfa: EpsNFA):
+    def __init__(
+        self,
+        eps_nfa: EpsNFA,
+        match_mode: MatchMode = MatchMode.AUTO,
+        has_end_anchor: bool = False,
+        requires_continuation: bool = False,
+    ):
+        """Initialize the complexity analyzer.
+
+        Args:
+            eps_nfa: The epsilon-NFA to analyze.
+            match_mode: How the regex is expected to be used.
+                - AUTO: Check for anchors to determine if patterns can escape early
+                - FULL: Assume full-string matching (conservative, may have FPs)
+                - PARTIAL: Assume partial matching (fewer FPs for NGINX etc.)
+            has_end_anchor: Whether the pattern has an end anchor ($ or \\Z).
+            requires_continuation: Whether the pattern has required content
+                after quantified groups (e.g., ^([^@]+)+@).
+        """
         self.eps_nfa = eps_nfa
+        self.match_mode = match_mode
+        self.has_end_anchor = has_end_anchor
+        self.requires_continuation = requires_continuation
         self.ordered_nfa = OrderedNFA.from_eps_nfa(eps_nfa)
 
     def analyze(self) -> Tuple[Complexity, Optional[AmbiguityWitness]]:
         """Analyze the complexity of the regex.
 
         Uses a hybrid approach:
-        1. SCC-based check for exponential ambiguity (multi-transitions)
-        2. Product automaton for polynomial ambiguity (divergent pairs with cycles)
+        1. SCC-based check for exponential (EDA) using NFAwLA
+        2. Product automaton for polynomial (IDA) detection
 
         Returns:
             Tuple of (complexity, optional witness).
@@ -55,8 +76,15 @@ class ComplexityAnalyzer:
         if self.ordered_nfa.initial is None:
             return Complexity.safe(), None
 
-        # Step 1: Check for exponential ambiguity using SCC-based approach
-        complexity, scc_witness = check_with_scc(self.eps_nfa)
+        # Step 1: Check for exponential (EDA) using SCC-based approach
+        # This uses NFAwLA which preserves multi-transition info for EDA detection
+        complexity, scc_witness = check_with_scc(
+            self.eps_nfa,
+            match_mode=self.match_mode,
+            has_end_anchor=self.has_end_anchor,
+            requires_continuation=self.requires_continuation,
+        )
+
         if complexity.type.value != "safe":
             if scc_witness is not None:
                 witness = AmbiguityWitness(
@@ -67,7 +95,8 @@ class ComplexityAnalyzer:
                 return complexity, witness
             return complexity, None
 
-        # Step 2: Check for polynomial ambiguity using product automaton
+        # Step 2: Check for polynomial (IDA) using product automaton
+        # The SCC checker handles EDA well, but IDA needs product automaton
         product_trans, reachable = build_product_nfa(self.ordered_nfa)
 
         # Find divergent pairs (states where the two components differ)
@@ -75,13 +104,6 @@ class ComplexityAnalyzer:
 
         if not divergent_pairs:
             return Complexity.safe(), None
-
-        # Check for exponential ambiguity (cycles on divergent pairs)
-        eda_witness = self._check_exponential_ambiguity_with_product(
-            divergent_pairs, product_trans
-        )
-        if eda_witness:
-            return Complexity.exponential(), eda_witness
 
         # Check for polynomial ambiguity (divergent pairs with bidirectional cycles)
         ida_result = self._check_polynomial_ambiguity_with_product(

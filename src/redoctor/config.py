@@ -28,6 +28,27 @@ class SeederType(Enum):
     DYNAMIC = "dynamic"
 
 
+class MatchMode(Enum):
+    """How the regex is expected to be used for matching.
+
+    This affects false positive detection for patterns like (a*)* which are:
+    - SAFE with partial matching (can escape early)
+    - EXPONENTIAL with full-string matching (must consume all input)
+
+    Values:
+        AUTO: Check for anchors (^ and $) in the pattern. Only flag unanchored
+              patterns if they have structural exponential ambiguity.
+        FULL: Assume full-string matching (like fullmatch() or anchored patterns).
+              Most conservative - may have false positives for unanchored patterns.
+        PARTIAL: Assume partial matching (like search() or match()).
+              Patterns without $ anchor can escape early - fewer false positives.
+    """
+
+    AUTO = "auto"
+    FULL = "full"
+    PARTIAL = "partial"
+
+
 @dataclass
 class Config:
     """Configuration parameters for recheck analysis.
@@ -60,6 +81,7 @@ class Config:
     recall_limit: int = 10
     recall_timeout: float = 1.0
     skip_recall: bool = False
+    match_mode: MatchMode = MatchMode.AUTO
 
     @classmethod
     def default(cls) -> "Config":

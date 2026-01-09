@@ -3,9 +3,13 @@
 
 from redoctor.parser.parser import parse, Pattern
 from redoctor.parser.flags import Flags
-from redoctor.parser.ast import has_backreferences
+from redoctor.parser.ast import (
+    has_backreferences,
+    has_end_anchor,
+    requires_continuation,
+)
 from redoctor.automaton.eps_nfa_builder import build_eps_nfa
-from redoctor.automaton.complexity_analyzer import ComplexityAnalyzer
+from redoctor.automaton.complexity_analyzer import ComplexityAnalyzer, MatchMode
 from redoctor.automaton.witness import generate_attack_from_witness
 from redoctor.diagnostics.diagnostics import Diagnostics
 from redoctor.diagnostics.hotspot import Hotspot
@@ -72,8 +76,28 @@ class AutomatonChecker:
                 message=f"NFA too large ({eps_nfa.size()} states); use fuzz checker.",
             )
 
+        # Determine match mode and anchor status
+        # Convert config match_mode to internal MatchMode enum
+        from redoctor.config import MatchMode as ConfigMatchMode
+
+        if self.config.match_mode == ConfigMatchMode.FULL:
+            match_mode = MatchMode.FULL
+        elif self.config.match_mode == ConfigMatchMode.PARTIAL:
+            match_mode = MatchMode.PARTIAL
+        else:
+            match_mode = MatchMode.AUTO
+
+        # Check for end anchor and continuation requirements in the pattern
+        pattern_has_end_anchor = has_end_anchor(pattern.node)
+        pattern_requires_continuation = requires_continuation(pattern.node)
+
         # Analyze complexity
-        analyzer = ComplexityAnalyzer(eps_nfa)
+        analyzer = ComplexityAnalyzer(
+            eps_nfa,
+            match_mode=match_mode,
+            has_end_anchor=pattern_has_end_anchor,
+            requires_continuation=pattern_requires_continuation,
+        )
         complexity, witness = analyzer.analyze()
 
         if complexity.is_safe:

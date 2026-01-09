@@ -30,7 +30,7 @@ result = check(pattern, config=Config.thorough())
 
 ```python
 from redoctor import Config
-from redoctor.config import CheckerType, AccelerationMode, SeederType
+from redoctor.config import CheckerType, AccelerationMode, SeederType, MatchMode
 
 config = Config(
     # === Checker Selection ===
@@ -92,6 +92,12 @@ config = Config(
     skip_recall=False,
     # Skip recall validation (faster but less accurate)
     # Type: bool
+
+    # === Match Mode (False Positive Control) ===
+    match_mode=MatchMode.AUTO,
+    # AUTO: Infer from pattern anchors (default)
+    # FULL: Assume full-string matching (conservative)
+    # PARTIAL: Assume partial matching (fewer false positives)
 )
 ```
 
@@ -148,6 +154,75 @@ Config.thorough()
 | `recall_timeout` | 5s | Thorough validation |
 
 **Best for:** Security audits, pre-release checks, one-time scans
+
+## Match Mode (False Positive Control)
+
+The `match_mode` setting controls how ReDoctor interprets pattern anchoring, which is critical for avoiding false positives.
+
+### The Problem
+
+Consider the pattern `(a*)*`:
+
+- With `re.fullmatch()` or explicit `$` anchor → **EXPONENTIAL** (must match entire string, backtracking occurs on failure)
+- With `re.search()` (partial match) → **SAFE** (can match early and stop, no backtracking needed)
+
+### Available Modes
+
+```python
+from redoctor.config import MatchMode
+
+# AUTO (default) - Infer from pattern anchors
+config = Config(match_mode=MatchMode.AUTO)
+
+# FULL - Assume full-string matching (conservative, catches more)
+config = Config(match_mode=MatchMode.FULL)
+
+# PARTIAL - Assume partial matching (fewer false positives)
+config = Config(match_mode=MatchMode.PARTIAL)
+```
+
+### Mode Comparison
+
+| Pattern | AUTO | FULL | PARTIAL | Reason |
+|:--------|:-----|:-----|:--------|:-------|
+| `(a*)*` | safe | exponential | safe | No anchor, can escape early |
+| `^(a*)*$` | exponential | exponential | exponential | Has `$`, must match to end |
+| `^([^@]+)+@` | exponential | exponential | exponential | `@` forces continuation |
+| `^(a+)+$` | exponential | exponential | exponential | Classic ReDoS with anchor |
+
+### When to Use Each Mode
+
+**AUTO (default):**
+
+- General-purpose analysis
+- Patterns with explicit anchors
+- Most web applications
+
+**FULL:**
+
+- Security audits (conservative)
+- Patterns used with `re.fullmatch()`
+- When unsure about usage context
+
+**PARTIAL:**
+
+- Reduce false positives for search-style matching
+- Patterns used with `re.search()` or `re.match()`
+- Grep-like tools
+
+### NGINX Location Blocks
+
+NGINX location regexes typically include anchors (`^...$`), so the default `AUTO` mode works correctly:
+
+```nginx
+# Safe (no nested quantifiers)
+location ~ ^/api/v[0-9]+/.*$ { }
+
+# Vulnerable (nested + with anchor) - correctly detected
+location ~ ^/([a-z]+)+/.*$ { }
+```
+
+Use `AUTO` or `FULL` for NGINX - don't use `PARTIAL` since NGINX patterns have explicit anchors.
 
 ## Checker Types
 

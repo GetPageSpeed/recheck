@@ -285,44 +285,40 @@ class OrderedNFARecheck:
 
         delta_size = 0
 
-        # Build transitions with pruning
+        # Build transitions for EDA detection
+        #
+        # Key insight: We need to preserve enough information to detect both:
+        # 1. Multi-transitions (duplicates) - always exploitable in practice
+        # 2. Non-determinism (different targets) - exploitable when they overlap
+        #
+        # Strategy:
+        # - Keep all duplicates (same target reached multiple times)
+        # - Keep different targets (for pair graph analysis)
+        # - Use look-ahead in SCC checker to filter false positives
+        #
+        # This approach may have some false positives that the SCC checker
+        # will need to filter based on pair graph connectivity.
         for (q1, a), targets in self.delta.items():
             for p1, p2 in reverse_delta.get(a, []):
-                # targets is ordered by priority
-                # Only include (q2, p2) if no earlier q in targets is in p2
-
-                pruned_targets: List[NFAState] = []
-                blocked = False
-
+                # Convert all targets to NFAwLA state format
+                nfa_targets: List[NFAState] = []
                 for q2 in targets:
-                    if blocked:
-                        continue
-
-                    # Check if this target should be pruned
-                    # q2 is pruned if any earlier target was in p2
-                    pruned_targets.append((q2, p2))
+                    nfa_targets.append((q2, p2))
                     new_state_set.add((q2, p2))
 
-                    # If q2 is in p2, block all subsequent targets
-                    if q2 in p2:
-                        blocked = True
-
-                if pruned_targets:
+                if nfa_targets:
                     nfa_state = (q1, p1)
                     nfa_char: NFAChar = (a, p2)
                     new_alphabet.add(nfa_char)
                     new_state_set.add(nfa_state)
 
-                    # APPEND to existing list (don't replace) - this accumulates
-                    # targets from different original transitions, allowing
-                    # multi-transition detection
                     key = (nfa_state, nfa_char)
                     if key in new_delta:
-                        new_delta[key].extend(pruned_targets)
+                        new_delta[key].extend(nfa_targets)
                     else:
-                        new_delta[key] = pruned_targets
+                        new_delta[key] = nfa_targets
 
-                    delta_size += len(pruned_targets)
+                    delta_size += len(nfa_targets)
                     if delta_size > max_size:
                         raise ValueError(f"NFAwLA size exceeds limit: {delta_size}")
 

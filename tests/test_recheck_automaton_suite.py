@@ -10,6 +10,7 @@ detecting what is vulnerable and what is not.
 import pytest
 
 from redoctor.parser.parser import parse
+from redoctor.parser.ast import has_end_anchor, requires_continuation
 from redoctor.automaton.eps_nfa_builder import build_eps_nfa
 from redoctor.automaton.complexity_analyzer import ComplexityAnalyzer
 from redoctor.diagnostics.complexity import ComplexityType
@@ -27,8 +28,13 @@ def check_complexity(pattern_str: str, flags: str = "") -> ComplexityType:
     """
     pattern = parse(pattern_str)
     eps_nfa = build_eps_nfa(pattern)
-    # Note: OrderedNFA is created internally by ComplexityAnalyzer
-    analyzer = ComplexityAnalyzer(eps_nfa)
+    pattern_has_end_anchor = has_end_anchor(pattern.node)
+    pattern_requires_continuation = requires_continuation(pattern.node)
+    analyzer = ComplexityAnalyzer(
+        eps_nfa,
+        has_end_anchor=pattern_has_end_anchor,
+        requires_continuation=pattern_requires_continuation,
+    )
     complexity, _ = analyzer.analyze()
     return complexity.type
 

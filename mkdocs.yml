@@ -192,6 +192,7 @@ nav:
     - Python API: api.md
     - Configuration: configuration.md
     - Source Scanning: source-scanning.md
+    - NGINX Usage: nginx-usage.md
   - Learn:
     - Understanding ReDoS: redos-explained.md
     - Vulnerable Patterns: vulnerable-patterns.md

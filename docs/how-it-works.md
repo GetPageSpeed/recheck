@@ -105,20 +105,65 @@ Pattern: (a|ab)+
               └────ε────┘
 ```
 
-#### Ambiguity Detection
+#### NFAwLA (NFA with Look-Ahead)
 
-Analyzes the NFA for **ambiguous states** where multiple paths can match the same input:
+A key innovation from the [recheck](https://github.com/makenowjust-labo/recheck) project is the **NFAwLA** - an NFA augmented with look-ahead information to eliminate false positives.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    NFAwLA Construction                   │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  1. Build OrderedNFA from ε-NFA                         │
+│                                                          │
+│  2. Reverse the NFA and convert to DFA                  │
+│     (This DFA tells us what can follow each state)      │
+│                                                          │
+│  3. Product: NFA × Reversed-DFA                         │
+│     States become pairs: (nfa_state, lookahead_state)   │
+│                                                          │
+│  4. Prune unreachable transitions                       │
+│     (Transitions that can never lead to acceptance)     │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+The look-ahead DFA eliminates "dead-end" ambiguity that would cause false positives.
+
+#### SCC-Based Ambiguity Detection
+
+Uses **Strongly Connected Components** to detect vulnerability patterns:
 
 ```python
 # Ambiguity types detected:
-# 1. IDA (Immediate Direct Ambiguity)
-#    - Same character on multiple transitions
 #
-# 2. EDA (Extended Direct Ambiguity)
-#    - Paths through ε-transitions that overlap
+# 1. EDA (Exponential Degree of Ambiguity)
+#    - Multiple transitions on same character within an SCC
+#    - Results in O(2^n) complexity
 #
-# 3. SBA (State-Based Ambiguity)
-#    - Loops with overlapping character sets
+# 2. IDA (Polynomial Degree of Ambiguity)
+#    - SCC chains with shared characters
+#    - Results in O(n^k) complexity
+```
+
+The SCC checker uses Tarjan's algorithm to find cycles, then analyzes transitions within each SCC for ambiguity.
+
+#### Exploitability Check
+
+Not all ambiguous patterns are exploitable. The `_is_multi_trans_exploitable` check considers:
+
+1. **Pattern anchoring**: Does the pattern have `$` or `\Z`?
+2. **Continuation requirement**: Must something match after the ambiguous part?
+3. **Match mode**: How will the regex be used (full vs partial match)?
+
+```python
+# Pattern: (a*)*
+# - Without $ anchor: can match early → SAFE
+# - With $ anchor: must match to end → EXPONENTIAL
+
+# Pattern: ([^@]+)+@
+# - The @ forces continuation → EXPONENTIAL
+# - Even without $ anchor, backtracking is required
 ```
 
 #### Witness Generation
@@ -130,6 +175,9 @@ When ambiguity is found, generates a **witness** (proof of vulnerability):
 # prefix = "a"
 # pump = "a"
 # suffix = "!"
+
+# Attack string: prefix + pump * n + suffix
+# As n grows, matching time grows exponentially
 ```
 
 ### 3. Fuzz Checker
@@ -191,7 +239,27 @@ POLYNOMIAL_THRESHOLD = 10000
 EXPONENTIAL_THRESHOLD = 100000
 ```
 
-### 4. Complexity Analyzer
+### 4. Match Mode (False Positive Control)
+
+The `match_mode` setting controls how patterns are analyzed:
+
+```python
+from redoctor.config import MatchMode
+
+# AUTO (default): Infer from pattern anchors
+# FULL: Assume full-string matching (conservative)
+# PARTIAL: Assume partial matching (fewer false positives)
+```
+
+| Mode | Use Case | Behavior |
+|:-----|:---------|:---------|
+| AUTO | General use | Checks for `$` anchor and continuation |
+| FULL | Security audits | All multi-transitions are exploitable |
+| PARTIAL | Search-style | Only flagged if anchor/continuation exists |
+
+See [Configuration Guide](configuration.md#match-mode-false-positive-control) for details.
+
+### 5. Complexity Analyzer
 
 Classifies vulnerability severity:
 
@@ -209,7 +277,7 @@ from redoctor.diagnostics.complexity import Complexity, ComplexityType
 # Fit to complexity curve
 ```
 
-### 5. Recall Validator
+### 6. Recall Validator
 
 Confirms vulnerabilities with real execution:
 
