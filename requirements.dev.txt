@@ -1,0 +1,10 @@
+# Development dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-timeout>=2.0.0
+pytest-xdist
+coverage>=4.3
+flake8>=3.2
+setuptools
+twine
+build

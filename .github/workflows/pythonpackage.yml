@@ -1,0 +1,88 @@
+name: Python tests
+
+on:
+  push:
+    paths:
+      - 'src/recheck/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - '*.py'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - '.github/workflows/pythonpackage.yml'
+  pull_request:
+    paths:
+      - 'src/recheck/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - '*.py'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - '.github/workflows/pythonpackage.yml'
+
+jobs:
+  # Verify Python 3.6 compatibility
+  py36-compat:
+    name: Python 3.6 compatibility check
+    runs-on: ubuntu-22.04
+    container:
+      image: python:3.6-slim
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install flake8
+        run: pip install flake8
+      - name: Check for Python 3.6 syntax compatibility
+        run: |
+          # Check for syntax errors and undefined names (F821)
+          flake8 scripts/ src/recheck/ --count --select=E9,F63,F7,F82,F821 --show-source --statistics
+      - name: Verify Python 3.6 compat script works
+        run: |
+          python scripts/check_py36_compat.py src/recheck/*.py
+
+  # Test on legacy Python versions (3.6, 3.7)
+  legacy:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ['3.6', '3.7']
+    container:
+      image: python:${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies & test
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements.dev.txt
+          pip install -e .
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          pytest -v -n auto tests/
+
+  # Test on modern Python versions (3.8+)
+  modern:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-22.04
+    strategy:
+      max-parallel: 4
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install -r requirements.dev.txt
+        pip install -e .
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: Test with pytest
+      run: |
+        pytest -v -n auto tests/
