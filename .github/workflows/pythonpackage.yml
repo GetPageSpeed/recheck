@@ -2,23 +2,9 @@ name: Python tests
 
 on:
   push:
-    paths:
-      - 'src/recheck/**'
-      - 'tests/**'
-      - 'scripts/**'
-      - '*.py'
-      - 'requirements*.txt'
-      - 'pyproject.toml'
-      - '.github/workflows/pythonpackage.yml'
+    branches: [main]
   pull_request:
-    paths:
-      - 'src/recheck/**'
-      - 'tests/**'
-      - 'scripts/**'
-      - '*.py'
-      - 'requirements*.txt'
-      - 'pyproject.toml'
-      - '.github/workflows/pythonpackage.yml'
+    branches: [main]
 
 jobs:
   # Verify Python 3.6 compatibility
