@@ -10,10 +10,12 @@ class TestCLI:
     def run_cli(self, args, input_text=None):
         """Run the CLI and return result."""
         cmd = [sys.executable, "-m", "redoctor.cli"] + args
+        # Use stdout/stderr=PIPE instead of capture_output for Python 3.6 compat
         result = subprocess.run(
             cmd,
-            capture_output=True,
-            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,  # Python 3.6 compat for text=True
             input=input_text,
             timeout=30,
         )
@@ -95,10 +97,12 @@ class TestCLIEntryPoint:
 
     def test_module_runnable(self):
         """Test that module is runnable with python -m."""
+        # Use stdout/stderr=PIPE instead of capture_output for Python 3.6 compat
         result = subprocess.run(
             [sys.executable, "-m", "redoctor.cli", "--help"],
-            capture_output=True,
-            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,  # Python 3.6 compat for text=True
             timeout=10,
         )
         assert result.returncode == 0
